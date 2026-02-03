@@ -1,0 +1,51 @@
+{
+  "camera": {
+    "resolution": "4k",
+    "fps": 50
+  },
+  "start_roi": {
+    "x1": 0.8510416666666667,
+    "y1": 0.014814814814814815,
+    "x2": 0.9666666666666667,
+    "y2": 0.9611111111111111,
+    "comment": "Coordinates are normalized (0-1). x1,y1 = top-left, x2,y2 = bottom-right"
+  },
+    "end_roi": {
+    "x1": 0.1510416666666667,
+    "y1": 0.014814814814814815,
+    "x2": 0.2666666666666667,
+    "y2": 0.9611111111111111,
+    "comment": "Coordinates are normalized (0-1). x1,y1 = top-left, x2,y2 = bottom-right"
+  },
+  "focus": {
+    "mode": "manual",
+    "x1": 0.165625,
+    "y1": 0.03148148148148148,
+    "x2": 0.915625,
+    "y2": 0.9481481481481482,
+    "manual_value": 131,
+    "enabled": true,
+    "comment": "mode: 'auto' or 'manual'. manual_value: 0-255 (0=far, 255=near)"
+  },
+  "exposure": {
+    "mode": "auto",
+    "time_us": 10000,
+    "iso": 800,
+    "compensation": 0,
+    "enabled": true,
+    "comment": "mode: 'auto' or 'manual'. time_us: exposure time in microseconds, iso: 100-1600, compensation: -3 to +3"
+  },
+  "motion_detection": {
+    "threshold": 30,
+    "min_contour_area": 3000,
+    "gaussian_blur_kernel": 39,
+    "comment": "threshold: sensitivity (lower = more sensitive), min_contour_area: minimum size in pixels"
+  },
+  "capture": {
+    "output_dir": "captures",
+    "image_format": "jpg",
+    "quality": 95,
+    "cooldown_seconds": 7.0,
+    "comment": "cooldown prevents multiple captures of the same motion event"
+  }
+}
