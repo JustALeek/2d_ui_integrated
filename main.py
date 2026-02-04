@@ -31,6 +31,8 @@ class MyApp(QMainWindow):
         ch.setFormatter(log_fomatter.LogColorFormatter())
         self.logger.addHandler(ch)
         
+        self.manager =  MainManager()
+
         super().__init__()
         self.initUI()
 
@@ -384,10 +386,8 @@ class MyApp(QMainWindow):
     # 캡처 시 이미지 변경
     def capture_change_image(self): 
         self.logger.info("Start change image after caputre.")
-        print("AHGEOAIEGOIAEHGOIHAOIEGHOIAHEOIGHAOEHGOHAEIGHOAEHGOAHEOIGOAIEHGOHAEOIGHOIAEGOI")
         if self.camera.img_name is not None:
-            manager = MainManager()
-            frame = manager.run_load_pipeline(self.camera.img_name)
+            frame = self.manager.run_load_pipeline(self.camera.img_name)
 
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -694,28 +694,11 @@ class MyApp(QMainWindow):
 
         clicked_item = self.history_table.item(row, column)
         if clicked_item:
-            self.camera.img_frame, self.camera.json_data = self.history.get_jpg_json_by_filename(clicked_item.text())
-
-            frame = self.camera.img_frame
-
-            h, w = frame.shape[:2]
-    
-            base_thickness = max(2, int(w / 300)) 
-            base_font_scale = w / 1200
-
-            x1, y1, x2, y2 = self.camera.json_data[0]['bbox']
-            error_val = self.camera.json_data[0]['error_val']
-
-            current_thresh = self.current_val / 100.0
-
-            self.color = (0, 255, 0) if error_val < current_thresh else (0, 0, 255)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), self.color, base_thickness)
-
-            label = f"Err: {error_val:.2f}"
-            text_y = y1 - base_thickness if y1 - base_thickness > 40 else y1 + 40
-
-            cv2.putText(frame, label, (x1, text_y), cv2.FONT_HERSHEY_SIMPLEX, base_font_scale, self.color, base_thickness)
-
+            try:
+                frame = self.manager.run_load_pipeline(clicked_item.text())
+            except FileNotFoundError as e:
+                self.logger.error("Failed image load - image not found in DB")
+                return
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             h, w, ch = rgb_image.shape

@@ -1,18 +1,12 @@
 from datetime import datetime
-import random
-import cv2
 from util.file import File
-from analysis.filter import MainManager, DataProcessor, StitchingProcessor
+from analysis.filter import MainManager
 from detection.point_detection.inference import PointDetInference
 from detection.segmentation.inference_two_stage import TwoStageInference
-from shapely.geometry import Polygon, MultiPolygon, MultiPoint, LineString, Point
 from config import file_const
 
 class Inspection():    
     def temporary(self, frame):
-
-        height, width = frame.shape[:2]
-
         # inference (point detection & segmentation)
 
         # point, inner, overlap (point detection)
@@ -36,3 +30,4 @@ class Inspection():
         file.save_jpg(frame, timestamp)
 
         return img_name
+    

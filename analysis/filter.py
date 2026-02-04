@@ -1,23 +1,14 @@
-from datetime import datetime
 import json
-import time
-from tkinter import filedialog
 import cv2
-import xml.etree.ElementTree as ET
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button
 import numpy as np
 from shapely.geometry import Polygon, MultiPolygon, MultiPoint, LineString, Point, MultiLineString
 from shapely.ops import split, linemerge, unary_union
 from shapely.wkt import loads
 import shapely
-import os
 import mariadb
-import tkinter as tk
-from detection.point_detection.inference import PointDetInference
 
-# Handles saving, loading, and running pipelines
 class MainManager:
+    """Handles saving, loading, and running pipelines. Only class that has a connection to DB."""
     def __init__(self):
         self.conn = mariadb.connect(
             user="testuser",
@@ -25,17 +16,20 @@ class MainManager:
             host="127.0.0.1",
             database="testdb")
     
-    def save_dbdata(self, img_name, img_data, polygons, connected_points, connected_inner_points, slider_values, matches, sacb):
+    def save_dbdata(self, img_name, frame, polygons, connected_points, connected_inner_points, slider_values, matches, sacb):
         cur = self.conn.cursor()
 
         #Saving images
         sql = """
         INSERT INTO images (img_name, img_data)
         VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE
+        ON DUPLICATE KEY UPDATE 
             img_data = VALUES(img_data)
         """
-        cur.execute(sql, (img_name, img_data))
+        _, buffer = cv2.imencode(".jpg", frame)
+        img_bytes = buffer.tobytes()
+
+        cur.execute(sql, (img_name, img_bytes))
 
         #Saving polygons
         sql = """
@@ -53,7 +47,7 @@ class MainManager:
             
             # Convert Shapely Polygon to list of coordinates
             vertices_list = list(polygon_obj.exterior.coords)
-            
+
             # Convert to JSON string for storage
             vertices_json = json.dumps(vertices_list)
             
@@ -70,16 +64,16 @@ class MainManager:
             neighbour_margin_factor,
             boundary_margin_factor,
             max_connected_line_dist,
-            max_component_offset_distance,
-            max_stitching_offset_distance
+            max_component_offset_dist,
+            max_stitching_offset_dist
         )
         VALUES (%s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             neighbour_margin_factor = VALUES(neighbour_margin_factor),
             boundary_margin_factor = VALUES(boundary_margin_factor),
             max_connected_line_dist = VALUES(max_connected_line_dist),
-            max_component_offset_distance = VALUES(max_component_offset_distance),
-            max_stitching_offset_distance = VALUES(max_stitching_offset_distance)
+            max_component_offset_dist = VALUES(max_component_offset_dist),
+            max_stitching_offset_dist = VALUES(max_stitching_offset_dist)
         """
 
         cur.execute(
@@ -89,8 +83,9 @@ class MainManager:
                 slider_values.get("neighbour_margin_factor"),
                 slider_values.get("boundary_margin_factor"),
                 slider_values.get("max_connected_line_dist"),
-                slider_values.get("max_component_offset_distance"),
-                slider_values.get("max_stitching_offset_distance")
+                slider_values.get("max_component_offset_dist"),
+                slider_values.get("max_stitching_offset_dist" \
+                "")
             )
         )
 
@@ -113,7 +108,7 @@ class MainManager:
             entry["distance"] = float(m.get("distance", 0))
             serializable_matches.append(entry)
 
-        match_json = json.dumps(serializable_matches)
+        match_json = None if not serializable_matches else json.dumps(serializable_matches)
 
         sql = """
             INSERT INTO matches (img_name, match_data)
@@ -124,25 +119,26 @@ class MainManager:
         cur.execute(sql, (img_name, match_json))
 
         # Saving stitching_alignment_closest_boundary
-        sql = """
-            INSERT INTO stitching_alignment_closest_boundary (img_name, line_data) VALUES (%s, %s) 
-            ON DUPLICATE KEY UPDATE 
-                line_data = VALUES(line_data)
-        """
-    
-        # Prepare values
-        values = []
+        lines = []
+
         for line in sacb:
             if isinstance(line, LineString):
-                line_str = line.wkt
+                lines.append(line.wkt)
             elif isinstance(line, str):
-                line_str = line
+                lines.append(line)
             else:
-                raise TypeError("Each line must be a LineString or a WKT string")
-            values.append((img_name, line_str))
-        
-        # Execute in batch
-        cur.executemany(sql, values)
+                raise TypeError("Invalid line type")
+
+        sql = """
+        INSERT INTO stitching_alignment_closest_boundary (img_name, lines_json)
+        VALUES (%s, %s)
+        ON DUPLICATE KEY UPDATE lines_json = VALUES(lines_json)
+        """
+
+        if not lines:
+            cur.execute(sql, (img_name, None))
+        else:
+            cur.execute(sql, (img_name, json.dumps(lines)))
 
         self.conn.commit()
 
@@ -192,15 +188,21 @@ class MainManager:
                 layer,
                 point_data_json
             ))
-        
+
     def load_dbdata(self, img_name):
+        """
+        Load data from database based on image name. Will handle any empty values or NULLs EXCEPT for when image is not found.
+        """
         cur = self.conn.cursor()
+
         #Loading image
         cur.execute("SELECT img_data FROM images WHERE img_name = %s", (img_name,))
         row = cur.fetchone()
-        img_bytes = row[0]
+        if row is None:
+            raise FileNotFoundError(f"Image '{img_name}' not found in database") 
         np_arr = np.frombuffer(img_bytes, dtype=np.uint8)
         img_data = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
         #Loading polygons
         cur.execute("SELECT polygon_index, label, vertices FROM polygons WHERE img_name = %s", (img_name,))
         rows = cur.fetchall()
@@ -219,8 +221,8 @@ class MainManager:
             SELECT neighbour_margin_factor,
                 boundary_margin_factor,
                 max_connected_line_dist,
-                max_component_offset_distance,
-                max_stitching_offset_distance
+                max_component_offset_dist,
+                max_stitching_offset_dist
             FROM slider_values
             WHERE img_name = %s
         """, (img_name,))
@@ -230,25 +232,36 @@ class MainManager:
         slider_values = {key: float(value) if value is not None else None for key, value in row.items()}
 
         #Loading matches
-        cur.execute(f"SELECT match_data FROM matches WHERE img_name = %s", (img_name,))
+        cur.execute("SELECT match_data FROM matches WHERE img_name = %s", (img_name,))
         row = cur.fetchone()
-        if row is None:
-            return []
 
-        match_data = row[0]
-        if isinstance(match_data, str):
-            matches = json.loads(match_data)
+        if not row or row[0] is None:
+            matches = []
         else:
+            match_data = row[0]
+            if isinstance(match_data, str):
+                matches = json.loads(match_data)
+            else:
+                matches = match_data
 
-            matches = match_data  # already deserialized
+        cur.execute("SELECT lines_json FROM stitching_alignment_closest_boundary WHERE img_name = %s", (img_name,))
 
-        #Loading sacb
-        cur.execute(f"SELECT line_data FROM stitching_alignment_closest_boundary WHERE img_name = %s", (img_name,))
+        row = cur.fetchone()
+
+        # Default to empty list
         sacb = []
-        for (line_data,) in cur:
-            #reconstruct Shapely
-            line_obj = loads(line_data)
-            sacb.append(line_obj)
+
+        if row and row[0] is not None:
+            line_data = row[0]
+
+            # If stored as JSON string
+            if isinstance(line_data, str):
+                wkt_list = json.loads(line_data)
+            else:
+                wkt_list = line_data  # already decoded JSON
+
+            # Reconstruct Shapely LineStrings
+            sacb = [loads(wkt) for wkt in wkt_list]
         return img_data, polygons, connected_points, connected_inner_points, slider_values, matches, sacb
     
     def load_point_data(self, img_name, table_name):
@@ -268,6 +281,8 @@ class MainManager:
                 coords = boundary_json  # already a list
 
             line = LineString(coords)
+            if line.is_empty:
+                continue
             key = (line.wkt, layer)
 
             # Parse point_data JSON and reconstruct points
@@ -286,35 +301,54 @@ class MainManager:
         return points
     
     def run_save_pipeline(self, img_name, img_data, points, inner_points, overlap_points, polygons):
+        """
+        Given inferred data from point_detection and segmentation, postprocess and save data to database.
+        
+        :param img_name: name of the formatted image
+        :param img_data: image data as NumPy ndarray
+        :param points: points with label "point"
+        :param inner_points: points with label "inner"
+        :param overlap_points: points with label "overlap"
+        :param polygons: polygonal data - lineStrings matched with labels 
+        """
         points = DataProcessor.to_shapely_points(points)
         inner_points = DataProcessor.to_shapely_points(inner_points)
         overlap_points = DataProcessor.to_shapely_points(overlap_points)
         polygons = GeometryProcessor.reformat_to_polygon_objects(polygons)
         polygons, connected_points, connected_inner_points, slider_values, matches, sacb = DataProcessor.process_raw_points(points, inner_points, overlap_points, polygons)
         self.save_dbdata(img_name, img_data, polygons, connected_points, connected_inner_points, slider_values, matches, sacb)
-    
+
     def run_load_pipeline(self, img_name):
+        """
+        Given the name of the image, load saved data, perform error checking, and return fully visualized frame. 
+        """
         img, polygons, points, inner_points, slider_values, matches, sacb = self.load_dbdata(img_name)
         nmf = slider_values["neighbour_margin_factor"]
         bmf = slider_values["boundary_margin_factor"]
         mcld = slider_values["max_connected_line_dist"]
-        mcod = slider_values["max_component_offset_distance"]
-        msod = slider_values["max_stitching_offset_distance"]
+        mcod = slider_values["max_component_offset_dist"]
+        msod = slider_values["max_stitching_offset_dist"]
         # Visualization base
         alpha = 0.7
         vis = img.copy()
         vis = cv2.addWeighted(vis, alpha, np.full_like(img, 255), 1 - alpha, 0)
 
         # Draw stitching
-        vis, stitching_alignment_candidates = VisualizationProcessor.visualize_stitching_error(vis, points, nmf, bmf, mcld, 'points')
-        vis, _ = VisualizationProcessor.visualize_stitching_error(vis, inner_points, nmf, bmf, mcld, 'inner points')
+        vis, stitching_alignment_candidates = (
+            VisualizationProcessor.visualize_stitching_error(vis, points, nmf, bmf, mcld, 'points')
+            if points else (vis, [])
+        )
+        vis, _ = (
+            VisualizationProcessor.visualize_stitching_error(vis, inner_points, nmf, bmf, mcld, 'inner_points')
+            if inner_points else (vis, [])
+        )
 
         # Draw component alignment
-        vis = VisualizationProcessor.visualize_component_alignment_error(vis, matches, mcod)
+        vis = VisualizationProcessor.visualize_component_alignment_error(vis, matches, mcod) if matches else vis
 
         # Stitching alignment
-        stitching_alignment_to_check = StitchingProcessor.alignment_check(points, sacb, stitching_alignment_candidates)
-        vis = VisualizationProcessor.visualize_stitching_alignment_error(vis, stitching_alignment_to_check, msod)
+        stitching_alignment_to_check = StitchingProcessor.alignment_check(points, sacb, stitching_alignment_candidates) if sacb and stitching_alignment_candidates else []
+        vis = VisualizationProcessor.visualize_stitching_alignment_error(vis, stitching_alignment_to_check, msod) if stitching_alignment_to_check else vis
 
         return vis
         
@@ -322,22 +356,23 @@ class DataProcessor:
     """
     Handles processes related to parsing, modifying, restructuring data
     """
+    @staticmethod
     def process_raw_points(points, inner_points, overlap_points, polygons):
         points, inner_points, debug_fits = StitchingProcessor.resolve_overlaps(points, inner_points, overlap_points, polygons)
-        width_2d = GeometryProcessor.get_2d_width(polygons)
+        width_2d = GeometryProcessor.get_2d_width(polygons) if polygons else 0
         buffer_distance = 402
         #initial slider values
         slider_values = {
             "neighbour_margin_factor": 330,
             "boundary_margin_factor": 330,
             "max_connected_line_dist": 40,
-            "max_component_offset_distance": 210,
-            "max_stitching_offset_distance": 630
+            "max_component_offset_dist": 210,
+            "max_stitching_offset_dist": 630
         }
 
         mapping_points = GeometryProcessor.assign_points_to_polygons(points, polygons)
         mapping_inner_points = GeometryProcessor.assign_points_to_polygons(inner_points, polygons)
-        combined = GeometryProcessor.combined_geometry(polygons, width_2d/buffer_distance)
+        combined = GeometryProcessor.combined_geometry(polygons, width_2d/buffer_distance) if polygons else []
         
         connected_points = StitchingProcessor.process_point_groups(polygons, points, mapping_points, combined)
         connected_inner_points = StitchingProcessor.process_point_groups(polygons, inner_points, mapping_inner_points, combined)
@@ -901,8 +936,6 @@ class ComponentProcessor:
         """
         mudguards = [p for p in polygons if p["label"]=="layer0"]
         overlays = [p for p in polygons if p["label"]=="layer3"]
-        print(mudguards)
-        print(overlays)
 
         matches, stitching_alignment_closest_boundary = [], []
         
