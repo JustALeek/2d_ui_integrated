@@ -1,6 +1,5 @@
 from datetime import datetime
 from util.file import File
-from analysis.filter import MainManager
 from detection.point_detection.inference import PointDetInference
 from detection.segmentation.inference_two_stage import TwoStageInference
 from config import file_const
@@ -23,11 +22,15 @@ class Inspection():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         img_name = f"IMG_{timestamp}.{file_const.JPG_EXTENTION}"
 
-        manager = MainManager()
-        manager.run_save_pipeline(img_name, frame, points, inner_points, overlap_points, polygons)
-
         file = File()
         file.save_jpg(frame, timestamp)
-
-        return img_name
+        data_dict = {
+            "img_name": img_name,
+            "frame": frame,
+            "points": points,
+            "inner_points": inner_points,
+            "overlap_points": overlap_points,
+            "polygons": polygons
+        }
+        return data_dict
     

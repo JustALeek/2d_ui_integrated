@@ -18,52 +18,65 @@ from realtime.camera import Camera
 from analysis.history import History
 from config import main_const
 from config.log_config import log_fomatter
-from analysis.filter import MainManager
+from analysis.post_processor import MainManager
 
-# 메인 윈도우
 class MyApp(QMainWindow):
 
     def __init__(self):
+        """Initializes the main window, logging system, and focus policy."""
         self.logger = logging.getLogger("main")
         self.logger.setLevel(logging.DEBUG)
-
         ch = logging.StreamHandler(sys.stdout)
         ch.setFormatter(log_fomatter.LogColorFormatter())
         self.logger.addHandler(ch)
+        self.manager = MainManager()
         
-        self.manager =  MainManager()
-
+        # Initialize UI and focus setting
         super().__init__()
         self.initUI()
 
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setFocus()
+
     def initUI(self):
+        """Configures the main layout structure and arranges all frames."""
         self.logger.info("Start init UI.")
         self.color = None
-        
         self.img_data = None
-
         self.all_checked = True
+        self.history = History()
         
+        self.current_val = 10
+        self.neighbour_margin_factor = 330
+        self.boundary_margin_factor = 330
+        self.max_connected_line_dist = 40
+        self.max_component_offset_distance = 210
+        self.max_stitching_offset_distance = 630
         self.resolution_current_index = main_const.RESOLUTION_DEFAULT_INDEX
 
+        # Configure window properties
         self.setWindowTitle(main_const.WINDOW_TITLE)
         self.resize(main_const.WINDOW_RESIZE[0], main_const.WINDOW_RESIZE[1])
 
+        # Create central widget and main horizontal layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
 
+        # Create and add left/right main frames
         self.left_frame = QFrame()
         self.right_frame = QFrame()
-
         main_layout.addWidget(self.left_frame)
         main_layout.addWidget(self.right_frame)
 
+        # Set up nested layouts for each frame
         left_layout = QVBoxLayout(self.left_frame)
         right_layout = QVBoxLayout(self.right_frame)
 
+        # Assemble left side (Streaming monitor)
         left_layout.addWidget(self.initLeftStreamingUI())
 
+        # Assemble right side (Result, Threshold, and History)
         self.label_result = self.initRightImageUI()
         self.label_stats = self.initRightThresholdUI()
         self.label_log = self.initRightHistoryUI()
@@ -72,17 +85,19 @@ class MyApp(QMainWindow):
         right_layout.addWidget(self.label_stats, stretch=1)
         right_layout.addWidget(self.label_log, stretch=7)
 
+        # Start camera thread and display window
         self.camera.start()
-        
         self.show()
+
+        self.init_last_inspection()
+
         self.logger.info("End init UI")
 
-    # 좌측 UI
     def initLeftStreamingUI(self):
+        """Creates the UI group for real-time video streaming and resolution control."""
         self.logger.info("Start init realtime Streaming monitor UI.")
 
         left_realtime_streaming = QGroupBox(main_const.REALTIME_STREAMING_TITLE_TEXT)
-
         left_realtime_streaming.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -97,12 +112,12 @@ class MyApp(QMainWindow):
             }
         """)
 
+        # Instantiate camera thread and connect signals
         self.camera = Camera()
-        
         self.camera.change_pixmap_signal.connect(self.update_image)
 
+        # Create widgets (Video Label, Resolution Combo, Capture Button)
         layout = QVBoxLayout(left_realtime_streaming)
-
         self.video_label = QLabel(main_const.VIDEO_STREAMING_TEXT)
         self.video_label.setStyleSheet("""
             QLabel {
@@ -115,7 +130,6 @@ class MyApp(QMainWindow):
         self.video_label.setScaledContents(False)
 
         self.resolution_config_text = QLabel(main_const.RESOLUTION_CONFIG_TEXT)
-
         self.video_resolution = QComboBox()
         self.video_resolution.addItems(main_const.RESOLUTION_ITEAMS)
         self.video_resolution.setCurrentIndex(self.resolution_current_index)
@@ -143,11 +157,10 @@ class MyApp(QMainWindow):
         self.camera.capture_finished_signal.connect(self.capture_change_image)
 
         self.logger.info("End init realtime streaming monitor UI.")
-
         return left_realtime_streaming
     
-    # 우측 UI
     def initRightImageUI(self):
+        """Initializes the UI area for displaying inspection result images."""
         self.logger.info("Start init test analysis result UI.")
 
         analysis_result = QGroupBox(main_const.ANALYSIS_RESULT_TITLE_TEXT)
@@ -174,7 +187,6 @@ class MyApp(QMainWindow):
         self.result_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout = QVBoxLayout(analysis_result)
-
         layout.addWidget(self.result_image)
 
         self.logger.info("End init test analysis result UI.")
@@ -182,8 +194,9 @@ class MyApp(QMainWindow):
         return analysis_result
     
     def initRightThresholdUI(self):
+        """Initializes the UI for adjusting the error threshold via a slider."""
         self.logger.info("Start init threshold setting UI.")
-
+    
         threshold = QGroupBox(main_const.THRESHOLD_TITLE_TEXT)
         threshold.setStyleSheet("""
             QGroupBox {
@@ -198,36 +211,47 @@ class MyApp(QMainWindow):
                 padding: 0 3px 0 3px;
             }
         """)
-
-        threshold_text = QLabel(main_const.THRESHOLD_TEXT)
-        threshold_text.setFixedWidth(40)
-
-        self.current_val = 10
-        self.bar = QSlider(Qt.Orientation.Horizontal)
-        self.bar.setRange(0, 100)
-        self.bar.setValue(self.current_val)
-        self.bar.setMinimumWidth(threshold.width() - 100)
-        self.bar.setMaximumWidth(threshold.width() + 150)
-        self.bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
-        self.value_label = QLabel(main_const.THRESHOLD_DEFAULT_VALUE)
-        self.value_label.setFixedWidth(40)
-
-        layout = QHBoxLayout(threshold)
+        main_v_layout = QVBoxLayout(threshold)
+        self.sliders = []
+        self.initSlider("인접 땀수 여백", main_v_layout, threshold, 0)
+        self.initSlider("외곽 경계 여백", main_v_layout, threshold, 1)
+        self.initSlider("선 연결 허용치", main_v_layout, threshold, 2)
+        self.initSlider("부품 이탈 허용치", main_v_layout, threshold, 3)
+        self.initSlider("땀수 이탈 허용치", main_v_layout, threshold, 4)
         
-        layout.addWidget(threshold_text)
-        layout.addWidget(self.bar)
-        layout.addWidget(self.value_label)
-
-        self.bar.valueChanged.connect(self.update_label_text)
-        self.history = History()
-
         self.history.get_log()
-
         self.logger.info("End init threshold setting UI.")
 
         return threshold
     
+    def initSlider(self, label, main_v_layout, threshold, idx):
+        threshold_text = QLabel(label + ": ")
+        threshold_text.setFixedWidth(100)
+        threshold_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        err_bar = QSlider(Qt.Orientation.Horizontal)
+        err_bar.setRange(0, 500)
+        err_bar.setValue(main_const.THRESHOLDS[idx])
+        err_bar.setMinimumWidth(threshold.width() - 100)
+        err_bar.setMaximumWidth(threshold.width() + 150)
+        err_bar.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        value_label = QLabel(str(main_const.THRESHOLDS[idx]) + "px")
+        value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        value_label.setFixedWidth(40)
+        layout = QHBoxLayout()
+        layout.addWidget(threshold_text)
+        layout.addWidget(err_bar)
+        layout.addWidget(value_label)
+        main_v_layout.addLayout(layout)
+        err_bar.valueChanged.connect(lambda val: self.update_label_text(val, idx))
+        slider_dict = {
+            "idx": idx,
+            "label": label,
+            "bar": err_bar,
+            "value": main_const.THRESHOLDS[idx],
+            "value_label": value_label
+            }
+        self.sliders.append(slider_dict)
+
     def initRightHistoryUI(self):
         self.logger.info("Start init history UI.")
         
@@ -264,8 +288,8 @@ class MyApp(QMainWindow):
         open_folder = QPushButton(main_const.OPEN_FOLDER_TEXT)
         open_folder.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
 
+        # Setup history table
         file_names_with_ext, formatted_list, path = self.history.get_all_jpg()
-
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(5)
         self.history_table.setRowCount(len(file_names_with_ext))
@@ -335,6 +359,7 @@ class MyApp(QMainWindow):
 
     @pyqtSlot(QImage)
     def update_image(self, qt_img):
+        """Updates the streaming video label with a new frame, maintaining aspect ratio."""
         label_width = self.video_label.width()
         label_height = self.video_label.height()
         
@@ -345,8 +370,8 @@ class MyApp(QMainWindow):
         )
         self.video_label.setPixmap(pixmap)
 
-    # 해상도 변환
     def on_resolution_changed(self, index):
+        """Handles camera resolution changes based on the user's combo box selection."""
         if index == 0:
             self.camera.width_resize = main_const.RESOLUTION_LOW[0]
             self.camera.height_resize = main_const.RESOLUTION_LOW[1]
@@ -374,88 +399,203 @@ class MyApp(QMainWindow):
 
         self.camera.need_resize = True
 
-    # 마우스 캡처 클릭
     def capture_click_event(self):
+        """Triggers a 4K frame capture request via the camera thread."""
         self.camera.need_capture = True
 
-    # 키보드 캡처 Space/Enter
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Space or event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self.camera.need_capture = True
+    def clamp(v, lo, hi):
+        return max(lo, min(hi, v))
 
-    # 캡처 시 이미지 변경
+
+    def keyPressEvent(self, event):
+        k = event.key()
+        cam = self.camera
+
+        # ---------- Group 1: Capture / Reset ----------
+        if k in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            cam.need_capture = True
+            return
+
+        if k == Qt.Key.Key_Q:
+            self.logger.info("Change default")
+            cam.editor_trigger = 0
+            cam.init_motion_engine = True
+            return
+
+        # ---------- Group 2: Editor Selection ----------
+        editor_map = {
+            Qt.Key.Key_1: ("Change Roi editor", 1),
+            Qt.Key.Key_2: ("Change Focus editor", 2),
+            Qt.Key.Key_3: ("Change Exposure editor", 3),
+        }
+        if k in editor_map:
+            msg, val = editor_map[k]
+            self.logger.info(msg)
+            cam.editor_trigger = val
+            return
+
+        # ---------- Group 3: Save ----------
+        if k == Qt.Key.Key_S:
+            save_map = {
+                1: ("Save ROI to configuration file", cam.roi_editor.save_config),
+                2: ("Save focus settings to configuration file", cam.focus_editor.save_config),
+                3: ("Save exposure settings to configuration file", cam.exposure_editor.save_config),
+            }
+            if cam.editor_trigger in save_map:
+                msg, fn = save_map[cam.editor_trigger]
+                self.logger.info(msg)
+                fn()
+            return
+
+        # ---------- Group 4: Auto / Manual Toggle ----------
+        if k == Qt.Key.Key_M:
+            if cam.editor_trigger == 2:
+                fe = cam.focus_editor
+                fe.focus_mode = "manual" if fe.focus_mode == "auto" else "auto"
+                self.logger.info("Apply current focus settings to camera")
+                fe.apply_focus_settings(cam.q_control)
+
+            elif cam.editor_trigger == 3:
+                ee = cam.exposure_editor
+                ee.exposure_mode = "manual" if ee.exposure_mode == "auto" else "auto"
+                self.logger.info("Apply current exposure settings to camera")
+                ee.apply_exposure_settings(cam.q_control)
+            return
+
+        # ---------- Group 5: Reset ----------
+        if k == Qt.Key.Key_R:
+            if cam.editor_trigger == 1:
+                self.logger.info("[RESET] ROI reset to defaults (center 50%)")
+                cam.roi_editor.roi_normalized = dict(x1=0.25, y1=0.25, x2=0.75, y2=0.75)
+
+            elif cam.editor_trigger == 2 and cam.focus_editor.focus_mode == "auto":
+                self.logger.info("[RESET] Focus region reset to defaults (center 20%)")
+                cam.focus_editor.focus_normalized = dict(x1=0.4, y1=0.4, x2=0.6, y2=0.6)
+                cam.focus_editor.apply_focus_settings(cam.q_control)
+
+            elif cam.editor_trigger == 3 and cam.exposure_editor.exposure_mode == "auto":
+                self.logger.info("[RESET] Exposure compensation reset to 0")
+                cam.exposure_editor.exp_compensation = 0
+                cam.exposure_editor.apply_exposure_settings(cam.q_control)
+            return
+
+        # ---------- Group 6: Manual Adjustments ----------
+        fe, ee = cam.focus_editor, cam.exposure_editor
+
+        if fe.focus_mode == "manual":
+            delta = {
+                Qt.Key.Key_A: +1, Qt.Key.Key_D: -1,
+                Qt.Key.Key_Right: +10, Qt.Key.Key_Left: -10,
+            }.get(k)
+            if delta is not None:
+                fe.manual_focus_value = self.clamp(fe.manual_focus_value + delta, 0, 255)
+                fe.apply_focus_settings(cam.q_control)
+            return
+
+        if ee.exposure_mode == "auto":
+            delta = {Qt.Key.Key_A: +1, Qt.Key.Key_D: -1}.get(k)
+            if delta is not None:
+                ee.exp_compensation = self.clamp(ee.exp_compensation + delta, -3, 3)
+                ee.apply_exposure_settings(cam.q_control)
+            return
+
+        if ee.exposure_mode == "manual":
+            if k in (Qt.Key.Key_W, Qt.Key.Key_E, Qt.Key.Key_S, Qt.Key.Key_D):
+                step = {Qt.Key.Key_W: 500, Qt.Key.Key_E: 100,
+                        Qt.Key.Key_S: -500, Qt.Key.Key_D: -100}[k]
+                ee.exposure_time = self.clamp(
+                    ee.exposure_time + step, 1, cam.max_exposure
+                )
+                ee.apply_exposure_settings(cam.q_control)
+
+            elif k in (Qt.Key.Key_A, Qt.Key.Key_Z):
+                step = {Qt.Key.Key_A: 50, Qt.Key.Key_Z: -50}[k]
+                ee.iso_value = self.clamp(ee.iso_value + step, 100, 1600)
+                ee.apply_exposure_settings(cam.q_control)
+
+    def mousePressEvent(self, event):
+        """Records initial normalized mouse position on click for ROI/Focus configuration."""
+        if self.camera.editor_trigger == 1 and event.button() == Qt.MouseButton.LeftButton:
+            self.start_nx, self.start_ny = self.get_adjusted_coords(event)
+        elif self.camera.editor_trigger == 2 and self.camera.focus_editor.focus_mode == 'auto' and event.button() == Qt.MouseButton.LeftButton:
+            self.start_nx, self.start_ny = self.get_adjusted_coords(event)
+
+    def mouseReleaseEvent(self, event):
+        """Finalizes ROI or Focus area selection based on release coordinates."""
+        # Handle ROI Editor Mode
+        if self.camera.editor_trigger == 1:
+            end_nx, end_ny = self.get_adjusted_coords(event)
+            roi = self.camera.roi_editor
+            roi.roi_normalized['x1'] = min(self.start_nx, end_nx)
+            roi.roi_normalized['y1'] = min(self.start_ny, end_ny)
+            roi.roi_normalized['x2'] = max(self.start_nx, end_nx)
+            roi.roi_normalized['y2'] = max(self.start_ny, end_ny)
+
+        elif self.camera.editor_trigger == 2 and self.camera.focus_editor.focus_mode == 'auto':
+            end_nx, end_ny = self.get_adjusted_coords(event)
+            focus = self.camera.focus_editor
+            focus.focus_normalized['x1'] = min(self.start_nx, end_nx)
+            focus.focus_normalized['y1'] = min(self.start_ny, end_ny)
+            focus.focus_normalized['x2'] = max(self.start_nx, end_nx)
+            focus.focus_normalized['y2'] = max(self.start_ny, end_ny)
+
+    def get_adjusted_coords(self, event):
+        """Calculates normalized coordinates (0.0 to 1.0) adjusted for video letterboxing/offsets."""
+        if self.video_label.pixmap() is None:
+            return 0.0, 0.0
+        
+        # Fetch container and displayed image dimensions
+        label_w = self.video_label.width()
+        label_h = self.video_label.height()
+        pix_w = self.video_label.pixmap().width()
+        pix_h = self.video_label.pixmap().height()
+
+        # Calculate drawing offsets caused by KeepAspectRatio
+        dx = (label_w - pix_w) / 2
+        dy = (label_h - pix_h) / 2
+
+        # Map global mouse position to label local coordinates
+        label_pos = self.video_label.mapFromGlobal(event.globalPosition().toPoint())
+        
+        # Correct for offsets and normalize
+        adj_x = (label_pos.x() - dx) / pix_w
+        adj_y = (label_pos.y() - dy) / pix_h
+
+        # Clamping between 0 and 1
+        final_x = max(0.0, min(1.0, adj_x))
+        final_y = max(0.0, min(1.0, adj_y))
+
+        return final_x, final_y
+
     def capture_change_image(self): 
         self.logger.info("Start change image after caputre.")
-        if self.camera.img_name is not None:
-            frame = self.manager.run_load_pipeline(self.camera.img_name)
-
+        if self.camera.data_dict is not None:
+            # Saving to database and loading it back
+            d = self.camera.data_dict
+            self.manager.run_save_pipeline(d["img_name"], d["frame"], d["points"], d["inner_points"], d["overlap_points"], d["polygons"])
+            frame = self.manager.run_load_pipeline(d["img_name"])
+            
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
             h, w, ch = rgb_image.shape
             bytes_per_line = ch * w
-
             self.temp_buffer = rgb_image
-
             self.img_data = QImage(self.temp_buffer.data, w, h, bytes_per_line, QImage.Format.Format_RGB888).copy()
 
             self.set_result_pixmap(self.img_data)
-
             self.history_update()
 
             self.logger.info("End change image after caputre.")
         else:
             self.logger.error("Fail change image after caputre.")
 
-    # 임계값 텍스트 업데이트
-    def update_label_text(self):
-        self.current_val = self.bar.value()
-
-        self.value_label.setText(f"{self.current_val}%")
-
-        self.update_bbox_color()
-
-    # bbox 업데이트
-    def update_bbox_color(self):
-        self.logger.info("Start bbox update.")
-        
-        if self.img_data is not None:
-            threshold = self.current_val / 100
-            error_val = self.camera.json_data[0]['error_val']
-
-            if error_val > threshold:
-                self.color = (0, 0, 255)
-            else:
-                self.color = (0, 255, 0)
-
-            frame = self.camera.img_frame.copy()
-
-            bbox_h, bbox_w = frame.shape[:2]
-    
-            base_thickness = max(2, int(bbox_w / 300)) 
-            base_font_scale = bbox_w / 1200
-
-            x1, y1, x2, y2 = self.camera.json_data[0]['bbox']
-
-            cv2.rectangle(frame, (x1, y1), (x2, y2), self.color, base_thickness)
-
-            label = f"Err: {error_val:.2f}"
-            text_y = y1 - base_thickness if y1 - base_thickness > 40 else y1 + 40
-            cv2.putText(frame, label, (x1, text_y), cv2.FONT_HERSHEY_SIMPLEX, base_font_scale, self.color, base_thickness)
-
-            rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            h, w, ch = rgb_image.shape
-            bytes_per_line = ch * w
-
-            self.temp_buffer = rgb_image
-            self.img_data = QImage(self.temp_buffer.data, w, h, bytes_per_line, QImage.Format.Format_RGB888).copy()
-
-            self.set_result_pixmap(self.img_data)
-
-            self.logger.info("End bbox update.")
+    def update_label_text(self, val, idx):
+        """Updates the threshold percentage display and refreshes the visualization change."""
+        self.sliders[idx]["value_label"].setText(f"{val}%")
+        self.sliders[idx]["value"] = val
 
     # 로그 파일 내보내기
     def export_log_file(self):
+        """Exports accumulated inspection logs to a formatted JSONL file."""
         self.logger.info("Start export log file.")
 
         log, timestamp = self.history.get_log()
@@ -467,9 +607,10 @@ class MyApp(QMainWindow):
                 main_const.LOG_EXPORT_FALILED_CONTENT_TEXT,
                 QMessageBox.StandardButton.Ok
             )
-            self.logger.warning("Not exist log imformation.")
+            self.logger.warning("Not exist log information.")
             return
 
+        # Trigger file dialog for save path
         file_path, _ = QFileDialog.getSaveFileName(
             self, main_const.LOG_EXPORT_TEXT, f"{main_const.LOG_EXPORT_FILENAME}{timestamp}.{main_const.LOG_EXPORT_EXTENTION}", "JSON Lines Files (*.jsonl)"
         )
@@ -488,6 +629,7 @@ class MyApp(QMainWindow):
     
     # 전체 선택 클릭
     def select_all_rows(self):
+        """Bulk selects or deselects all rows in the history table."""
         if self.all_checked:
             for checkbox, _ in self.row_checkboxes:
                 checkbox.setChecked(True)
@@ -501,10 +643,12 @@ class MyApp(QMainWindow):
 
     # 체크박스 클릭
     def update_selected_info(self):
+        """Synchronizes the list of filenames currently checked in the history table."""
         self.selected_files = [fname for cb, fname in self.row_checkboxes if cb.isChecked()]
 
     # 캡처 시 히스토리 업데이트
     def history_update(self):
+        """Inserts a new entry at the top of the history table after a successful capture."""
         f_name, time, path = self.history.get_last_img()
 
         self.history_table.insertRow(0)
@@ -514,6 +658,7 @@ class MyApp(QMainWindow):
 
         action = self.create_action_buttons(f_name, path)
 
+        # Build table items
         item1 = QTableWidgetItem(f_name)
         item2 = QTableWidgetItem(time)
         item3 = QTableWidgetItem(main_const.HISTORY_TABLE_DEFAULT_STATUS_VALUE_TEXT)
@@ -522,6 +667,7 @@ class MyApp(QMainWindow):
         item2.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         item3.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # Insert items and widgets into row 0
         self.history_table.setCellWidget(0, 0, checkbox)
         self.history_table.setItem(0, 1, item1)
         self.history_table.setItem(0, 2, item2)
@@ -530,12 +676,11 @@ class MyApp(QMainWindow):
 
         self.row_checkboxes.append((checkbox, f_name))
 
-    # 폴더 열기
     def open_folder(self):
+        """Opens the directory containing capture files using the OS native file browser."""
         self.logger.info("Start open folder.")
 
         path = self.history.get_path()
-
         system_name = platform.system()
     
         try:
@@ -552,8 +697,8 @@ class MyApp(QMainWindow):
 
         self.logger.info("End open folder.")
 
-    # action 내 버튼 생성
     def create_action_buttons(self, f_name, path):
+        """Generates a widget container with 'View', 'Delete', and 'Upload' buttons for each row."""
         container = QWidget()
         layout = QHBoxLayout(container)
 
@@ -574,13 +719,12 @@ class MyApp(QMainWindow):
 
         return container
     
-    # 보기 버튼 클릭
     def look_file(self, f_name, path):
+        """Opens the individual capture file with the system default viewer."""
         self.logger.info("Start open file.")
 
         try:
             full_path = os.path.abspath(os.path.join(path, f_name))
-
             if platform.system() == "Windows":
                 os.startfile(full_path)
             elif platform.system() == "Darwin":
@@ -592,8 +736,8 @@ class MyApp(QMainWindow):
 
         self.logger.info("End open file.")
 
-    # 삭제 버튼 클릭
     def delete_file(self, f_name, path):
+        """Prompts for confirmation and deletes JPG from disk."""
         self.logger.info("Start delete files.")
         reply = QMessageBox.question(
             self, main_const.DELETE_REPLY_TITLE_TEXT, 
@@ -604,10 +748,7 @@ class MyApp(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 jpg_path = os.path.join(path, f_name)
-                json_path = os.path.join(path, f_name.replace(".jpg", ".json"))
-
                 os.remove(jpg_path)
-                os.remove(json_path)
             except Exception as e:
                 QMessageBox.critical(self, main_const.DELETE_FAILED_TITLE_TEXT, f"{main_const.DELETE_FAILED_CONTENT_TEXT}{e}")
                 self.logger.error("Failed delete files.")
@@ -627,8 +768,8 @@ class MyApp(QMainWindow):
 
         self.logger.info("End delete files.")
 
-    # 업로드 버튼 클릭
     def upload_file(self, f_name):
+        """Simulates file upload and updates status to 'Done' in the UI."""
         target_row = -1
         for i in range(self.history_table.rowCount()):
             if self.history_table.item(i, 1).text() == f_name:
@@ -694,8 +835,15 @@ class MyApp(QMainWindow):
 
         clicked_item = self.history_table.item(row, column)
         if clicked_item:
+            filename = clicked_item.text()
+            if "-" in filename:
+                date_part = filename[0:4] + filename[5:7] + filename[8:10]
+                time_part = filename[11:13] + filename[14:16] + filename[17:19]
+                ms_part = filename[20:23]
+
+                filename = f"IMG_{date_part}_{time_part}_{ms_part}.jpg" 
             try:
-                frame = self.manager.run_load_pipeline(clicked_item.text())
+                frame, slider_values = self.manager.run_load_pipeline(filename)
             except FileNotFoundError as e:
                 self.logger.error("Failed image load - image not found in DB")
                 return
@@ -707,13 +855,14 @@ class MyApp(QMainWindow):
             self.temp_buffer = rgb_image
             self.img_data = QImage(self.temp_buffer.data, w, h, bytes_per_line, QImage.Format.Format_RGB888).copy()
 
+            self.update_sliders(slider_values)
+
             self.set_result_pixmap(self.img_data)
 
-            self.logger.info("End image, bbox update.")
+            self.logger.info("End image update.")
         else:
-            self.logger.error("Failed image, bbox update.")
+            self.logger.error("Failed image update.")
 
-    # 이미지 크기에 맞게 조절
     def set_result_pixmap(self, q_img):
         if q_img.isNull():
             return
@@ -731,6 +880,40 @@ class MyApp(QMainWindow):
         self.result_image.setScaledContents(False) 
         self.result_image.setPixmap(scaled_pixmap)
 
+    def update_sliders(self, slider_values):
+        for i in range(5):
+            self.sliders[i]["value_label"].setText(str(list(slider_values.values())[i]) + "px")
+            self.sliders[i]["value"] = list(slider_values.values())[i]
+            label=self.sliders[i]["label"]
+            vallabel=self.sliders[i]["value_label"].text()
+            self.logger.info(f"Updated slider {label} to {vallabel}")
+
+    def init_last_inspection(self):
+        """Initializes the visualization interface by retrieving the most recent inspection record from the local repository."""
+        try:
+            # Fetch latest inspection record
+            jpg_file, _, _= self.history.get_last_img()
+            
+            if jpg_file:
+                # Sync data to camera buffer
+                frame, slider_values = self.manager.run_load_pipeline(jpg_file)
+                rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                h, w, ch = rgb_image.shape
+                bytes_per_line = ch * w
+
+                self.temp_buffer = rgb_image
+                self.img_data = QImage(self.temp_buffer.data, w, h, bytes_per_line, QImage.Format.Format_RGB888).copy()
+
+                self.set_result_pixmap(self.img_data)
+
+                self.update_sliders(slider_values)
+
+                self.logger.info("Successfully synchronized view with the latest inspection record.")
+            else:
+                self.logger.warning("No prior inspection records identified; maintaining default state.")
+        except Exception as e:
+            self.logger.error(f"Critical failure during initial data synchronization: {e}")
 
 def main():
     app = QApplication(sys.argv)

@@ -61,62 +61,64 @@ class Camera(QThread):
 
     def run(self):
         self.logger.info("Start 4K Camera System")
-        
-        with dai.Device(self.pipeline) as self.device:
-            self.logger.info(f"USB Speed: {self.device.getUsbSpeed()}")
-            
-            self.q_video = self.device.getOutputQueue(name=camera_const.VIDEO_OUT_STREAM_NAME, maxSize=1, blocking=False)
-            q_image = self.device.getOutputQueue(name="image_4k", maxSize=1, blocking=False)
-            
-            while self._run_flag:
-                data = self.q_video.tryGet()
-                if data is None: continue
-
-                self.frame = data.getCvFrame()
-
-                current_shape = self.frame.shape
-                if self.last_frame_shape is not None and self.last_frame_shape != current_shape:
-                    self.motion_engine = MotionCaptureSystem(config_path="realtime/depthai_capture_trigger/config.json")
-                self.last_frame_shape = current_shape
-
-                # Get ROI coordinates
-                start_roi_coords = self.motion_engine.get_roi_coords('start_roi', self.frame.shape)
-                end_roi_coords = self.motion_engine.get_roi_coords('end_roi', self.frame.shape)
+        try:
+            with dai.Device(self.pipeline) as self.device:
+                self.logger.info(f"USB Speed: {self.device.getUsbSpeed()}")
                 
-                # Detect motion
-                motion_contours, thresh = self.motion_engine.detect_motion(self.frame)
+                self.q_video = self.device.getOutputQueue(name=camera_const.VIDEO_OUT_STREAM_NAME, maxSize=1, blocking=False)
+                q_image = self.device.getOutputQueue(name="image_4k", maxSize=1, blocking=False)
                 
-                # Check if motion is in ROI
-                motion_in_start_roi = self.motion_engine.check_motion_in_roi(motion_contours, start_roi_coords)
-                motion_in_end_roi = self.motion_engine.check_motion_in_roi(motion_contours, end_roi_coords)
+                while self._run_flag:
+                    data = self.q_video.tryGet()
+                    if data is None: continue
 
-                if self.motion_engine.capture_state == 'waiting' and motion_in_end_roi:
-                    self.logger.info("[AUTO] Motion in ROI! Getting 4K Frame.")
-                    self.motion_engine.capture_state = 'captured'
-                    in_4k = q_image.get()
-                    self.capture(in_4k.getCvFrame())
+                    self.frame = data.getCvFrame()
 
-                elif self.motion_engine.capture_state == 'captured' and not motion_in_end_roi:
-                    self.motion_engine.frames_without_motion += 1
-                    if self.motion_engine.frames_without_motion >= 3:
-                        self.motion_engine.capture_state = 'waiting'
-                        self.motion_engine.frames_without_motion = 0
+                    current_shape = self.frame.shape
+                    if self.last_frame_shape is not None and self.last_frame_shape != current_shape:
+                        self.motion_engine = MotionCaptureSystem(config_path="realtime/depthai_capture_trigger/config.json")
+                    self.last_frame_shape = current_shape
 
-                if self.need_capture:
-                    in_4k = q_image.get()
-                    self.capture(in_4k.getCvFrame())
+                    # Get ROI coordinates
+                    start_roi_coords = self.motion_engine.get_roi_coords('start_roi', self.frame.shape)
+                    end_roi_coords = self.motion_engine.get_roi_coords('end_roi', self.frame.shape)
+                    
+                    # Detect motion
+                    motion_contours, thresh = self.motion_engine.detect_motion(self.frame)
+                    
+                    # Check if motion is in ROI
+                    motion_in_start_roi = self.motion_engine.check_motion_in_roi(motion_contours, start_roi_coords)
+                    motion_in_end_roi = self.motion_engine.check_motion_in_roi(motion_contours, end_roi_coords)
 
-                if self.need_resize:
-                    self.resolution()
+                    if self.motion_engine.capture_state == 'waiting' and motion_in_end_roi:
+                        self.logger.info("[AUTO] Motion in ROI! Getting 4K Frame.")
+                        self.motion_engine.capture_state = 'captured'
+                        in_4k = q_image.get()
+                        self.capture(in_4k.getCvFrame())
 
-                vis_frame = self.motion_engine.draw_visualization(self.frame, start_roi_coords, end_roi_coords, motion_contours, motion_in_start_roi, motion_in_end_roi)
-                
-                if self.width_resize != self.frame.shape[1] or self.height_resize != self.frame.shape[0]:
-                    vis_frame = cv2.resize(vis_frame, (self.width_resize, self.height_resize), interpolation=cv2.INTER_LINEAR)
+                    elif self.motion_engine.capture_state == 'captured' and not motion_in_end_roi:
+                        self.motion_engine.frames_without_motion += 1
+                        if self.motion_engine.frames_without_motion >= 3:
+                            self.motion_engine.capture_state = 'waiting'
+                            self.motion_engine.frames_without_motion = 0
 
-                h, w, ch = vis_frame.shape
-                qt_img = QImage(vis_frame.data, w, h, ch * w, QImage.Format.Format_BGR888)
-                self.change_pixmap_signal.emit(qt_img.copy())
+                    if self.need_capture:
+                        in_4k = q_image.get()
+                        self.capture(in_4k.getCvFrame())
+
+                    if self.need_resize:
+                        self.resolution()
+
+                    vis_frame = self.motion_engine.draw_visualization(self.frame, start_roi_coords, end_roi_coords, motion_contours, motion_in_start_roi, motion_in_end_roi)
+                    
+                    if self.width_resize != self.frame.shape[1] or self.height_resize != self.frame.shape[0]:
+                        vis_frame = cv2.resize(vis_frame, (self.width_resize, self.height_resize), interpolation=cv2.INTER_LINEAR)
+
+                    h, w, ch = vis_frame.shape
+                    qt_img = QImage(vis_frame.data, w, h, ch * w, QImage.Format.Format_BGR888)
+                    self.change_pixmap_signal.emit(qt_img.copy())
+        except:
+            self.logger.info("Run without camera")
 
     def stop(self):
         self._run_flag = False
@@ -130,7 +132,7 @@ class Camera(QThread):
     def capture(self, frame_4k):
         """캡처"""
         self.logger.info("Start capture (4K Original)")
-        self.img_name = Inspection().temporary(frame_4k)
+        self.data_dict = Inspection().temporary(frame_4k)
         self.img_frame = frame_4k
         self.need_capture = False
         self.capture_finished_signal.emit()

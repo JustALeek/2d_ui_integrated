@@ -30,6 +30,18 @@ RESULT_IMAGE_TEXT = "이력 목록에서 항목을 선택하십시오"
 THRESHOLD_TITLE_TEXT = "⚙️ Threshold 민감도 설정"
 THRESHOLD_TEXT = "임계값: "
 THRESHOLD_DEFAULT_VALUE = "10%"
+THRESHOLDS = [
+    330,
+    330,
+    40,
+    210,
+    630
+]
+THRESHOLD_NEIGHBOUR_MARGIN_FACTOR = "330px"
+THRESHOLD_BOUNDARY_MARGIN_FACTOR = "330px"
+THRESHOLD_MAX_CONNECTED_LINE_DIST = "40px"
+THRESHOLD_MAX_COMPONENT_OFFSET_DISTANCE = "210px"
+THRESHOLD_STITCHING_OFFSET_DISTANCE = "630px"
 
 ##################################################################
 # initRightHistoryUI
