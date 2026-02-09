@@ -5,7 +5,6 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 import picologging as logging
 
-from realtime.inspection import Inspection
 from config import camera_const
 from config.log_config import log_fomatter
 from realtime.depthai_capture_trigger.motion_capture import MotionCaptureSystem
@@ -30,7 +29,6 @@ class Camera(QThread):
         self.need_capture = False
         self.last_frame_shape = None
 
-        self.json_data = None
         self.img_frame = None
         
         self.width_resize = camera_const.DEFAULT_CAMERA_SIZE[0]
@@ -132,7 +130,6 @@ class Camera(QThread):
     def capture(self, frame_4k):
         """캡처"""
         self.logger.info("Start capture (4K Original)")
-        self.data_dict = Inspection().temporary(frame_4k)
         self.img_frame = frame_4k
         self.need_capture = False
         self.capture_finished_signal.emit()

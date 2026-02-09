@@ -20,7 +20,7 @@ class Inspection():
         polygons = tsi.predict(frame)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-        img_name = f"IMG_{timestamp}.{file_const.JPG_EXTENTION}"
+        img_name = f"IMG_{timestamp}.{file_const.JPG_EXTENSION}"
 
         file = File()
         file.save_jpg(frame, timestamp)

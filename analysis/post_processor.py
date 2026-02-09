@@ -251,7 +251,7 @@ class MainManager:
             points[key] = point_list
         return points
     
-    def run_save_pipeline(self, img_name, img_data, points, inner_points, overlap_points, polygons):
+    def run_save_pipeline(self, img_name, img_data, points, inner_points, overlap_points, polygons, processed = False, slider_values = None, matches = None, sacb = None):
         """
         Given inferred data from point_detection and segmentation, postprocess and save data to database.
         
@@ -261,13 +261,15 @@ class MainManager:
         :param inner_points: points with label "inner"
         :param overlap_points: points with label "overlap"
         :param polygons: polygonal data - lineStrings matched with labels 
+        :param slider_values: dictionary matching strings to integers
         """
-        points = DataProcessor.to_shapely_points(points)
-        inner_points = DataProcessor.to_shapely_points(inner_points)
-        overlap_points = DataProcessor.to_shapely_points(overlap_points)
-        polygons = GeometryProcessor.reformat_to_polygon_objects(polygons)
-        polygons, connected_points, connected_inner_points, slider_values, matches, sacb = DataProcessor.process_raw_points(points, inner_points, overlap_points, polygons)
-        self.save_dbdata(img_name, img_data, polygons, connected_points, connected_inner_points, slider_values, matches, sacb)
+        if not processed:
+            points = DataProcessor.to_shapely_points(points)
+            inner_points = DataProcessor.to_shapely_points(inner_points)
+            overlap_points = DataProcessor.to_shapely_points(overlap_points)
+            polygons = GeometryProcessor.reformat_to_polygon_objects(polygons)
+            polygons, points, inner_points, slider_values, matches, sacb = DataProcessor.process_raw_points(points, inner_points, overlap_points, polygons)
+        self.save_dbdata(img_name, img_data, polygons, points, inner_points, slider_values, matches, sacb)
 
     def run_load_pipeline(self, img_name):
         """
@@ -293,7 +295,6 @@ class MainManager:
             VisualizationProcessor.visualize_stitching_error(vis, inner_points, nmf, bmf, mcld, 'inner_points')
             if inner_points else (vis, [])
         )
-
         # Draw component alignment
         vis = VisualizationProcessor.visualize_component_alignment_error(vis, matches, mcod) if matches else vis
 
@@ -301,5 +302,15 @@ class MainManager:
         stitching_alignment_to_check = StitchingProcessor.alignment_check(points, sacb, stitching_alignment_candidates) if sacb and stitching_alignment_candidates and points else []
         vis = VisualizationProcessor.visualize_stitching_alignment_error(vis, stitching_alignment_to_check, msod) if stitching_alignment_to_check else vis
 
-        return vis, slider_values
+        data_dict = {
+            "img_name": img_name,
+            "frame": img,
+            "polygons": polygons,
+            "points": points,
+            "inner_points": inner_points,
+            "matches": matches,
+            "sacb": sacb
+        }
+
+        return vis, slider_values, data_dict
         

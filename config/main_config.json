@@ -1,0 +1,7 @@
+{
+    "neighbour_margin_factor": 330,
+    "boundary_margin_factor": 330,
+    "max_connected_line_dist": 40,
+    "max_component_offset_distance": 210,
+    "max_stitching_offset_distance": 630
+}

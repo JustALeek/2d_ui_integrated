@@ -17,10 +17,13 @@ class History():
 
     def get_all_jpg(self):
         """Retrieves all JPEG files and parses filenames into formatted timestamps for the startup screen."""
+        # Fetch raw JPEG files and directory path from file utility
         jpg_files, path = self.file.get_all_jpg()
 
+        # Extract filenames with extensions
         file_names_with_ext = [f.name for f in jpg_files]
 
+        # Parse 'IMG_YYYYMMDD_HHMMSS_ms' format into 'YYYY-MM-DD HH:MM:SS.ms'
         formatted_list = [
             f"{f[4:8]}-{f[8:10]}-{f[10:12]} {f[13:15]}:{f[15:17]}:{f[17:19]}.{f[20:23]}"
             for f in file_names_with_ext
@@ -28,7 +31,6 @@ class History():
 
         return file_names_with_ext, formatted_list, path
 
-    # .jpg 파일 불러오기 / 보기 기능
     def get_jpg(self, filename):
         if "-" in filename:
             date_part = filename[0:4] + filename[5:7] + filename[8:10]
@@ -41,13 +43,12 @@ class History():
 
         return jpg_path
 
-    # 폴더 열기
     def get_path(self):
+        """Returns the base directory path where capture files are stored."""
         path = self.file.get_path()
 
         return path
     
-    # 로그 내보내기
     def get_log(self):
         log = []
 
