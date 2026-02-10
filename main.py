@@ -54,8 +54,8 @@ class MyApp(QMainWindow):
         main_layout.addWidget(self.right_frame)
 
         # Initialize the camera background thread
-        self.camera = Camera()
-
+        self.camera = Camera() 
+        
         # Establish nested layouts for modular widget placement
         left_layout = QVBoxLayout(self.left_frame)
         right_layout = QVBoxLayout(self.right_frame)
@@ -98,11 +98,7 @@ class MyApp(QMainWindow):
                 self.image_view.current_image_data = data_dict
                 self.threshold_view
                 self.image_view.update_view(frame)
-                self.threshold_view._update_value(slider_values["neighbour_margin_factor"], 1)
-                self.threshold_view._update_value(slider_values["boundary_margin_factor"], 2)
-                self.threshold_view._update_value(slider_values["max_connected_line_dist"], 3)
-                self.threshold_view._update_value(slider_values["max_component_offset_dist"], 4)
-                self.threshold_view._update_value(slider_values["max_stitching_offset_dist"], 5)
+                self.threshold_view._update_value_dict(slider_values)
                 self.logger.info("Successfully synchronized view with the latest inspection record.")
             else:
                 self.logger.warning("No prior inspection records identified; maintaining default state.")

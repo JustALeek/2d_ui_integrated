@@ -108,6 +108,19 @@ class ThresholdUi(QGroupBox):
         # Persist changes and notify other modules
         self.threshold_changed_signal.emit()
 
+    def _update_value_dict(self, slider_values):
+        """Updates internal state variables and UI labels based on slider input."""
+
+        # Map indices to specific threshold variables
+        self._update_value(slider_values["neighbour_margin_factor"], 1)
+        self._update_value(slider_values["boundary_margin_factor"], 2)
+        self._update_value(slider_values["max_connected_line_dist"], 3)
+        self._update_value(slider_values["max_component_offset_dist"], 4)
+        self._update_value(slider_values["max_stitching_offset_dist"], 5)
+        
+        # Persist changes and notify other modules
+        self.threshold_changed_signal.emit()
+
     def _load_config(self, img_name = None):
         """Loads threshold configuration from a local JSON file or initializes defaults."""
 
@@ -150,5 +163,6 @@ class ThresholdUi(QGroupBox):
                                            slider_values = slider_values,
                                            matches = data["matches"],
                                            sacb = data["sacb"])
+            self.image.update_view()
         except Exception as e:
             self.logger.error(f"Failed save threshold data: {e}")

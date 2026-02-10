@@ -4,7 +4,7 @@ Handles video frames, resolution settings, and manual capture triggers.
 """
 
 from PyQt6.QtCore import pyqtSlot, Qt
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGroupBox, QComboBox,QPushButton
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGroupBox, QComboBox, QPushButton
 from PyQt6.QtGui import QImage, QPixmap, QShortcut, QKeySequence
 
 from config import main_const
@@ -47,7 +47,7 @@ class StreamingUi(QGroupBox):
                 padding: 0 3px 0 3px;
             }
         """)
-    
+
     def _setup_ui(self):
         """Creates and arranges UI widgets within the layout."""
         layout = QVBoxLayout(self)
@@ -156,11 +156,7 @@ class StreamingUi(QGroupBox):
         self.image.current_image_data = data_dict
 
         # update threshold sliders 
-        self.threshold._update_value(slider_values["neighbour_margin_factor"], 1)
-        self.threshold._update_value(slider_values["boundary_margin_factor"], 2)
-        self.threshold._update_value(slider_values["max_connected_line_dist"], 3)
-        self.threshold._update_value(slider_values["max_component_offset_dist"], 4)
-        self.threshold._update_value(slider_values["max_stitching_offset_dist"], 5)
+        self.threshold._update_value_dict(slider_values)
         self.history.history_update()
 
     def keyPressEvent(self, event):

@@ -292,7 +292,7 @@ class HistoryUi(QGroupBox):
         self.logger.info("Start export log file.")
 
         log, timestamp = self.history.get_log()
-
+ 
         if not log:
             QMessageBox.warning(
                 self,
@@ -368,6 +368,8 @@ class HistoryUi(QGroupBox):
         if clicked_item:
             # Sync camera buffers with historical data
             frame, slider_values, data_dict = self.manager.run_load_pipeline(clicked_item.text())
+
+            # Store related data in the imageUI object 
             self.image.current_image_data = data_dict
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -379,11 +381,7 @@ class HistoryUi(QGroupBox):
 
             self.set_result_pixmap(img_data)
 
-            self.threshold._update_value(slider_values["neighbour_margin_factor"], 1)
-            self.threshold._update_value(slider_values["boundary_margin_factor"], 2)
-            self.threshold._update_value(slider_values["max_connected_line_dist"], 3)
-            self.threshold._update_value(slider_values["max_component_offset_dist"], 4)
-            self.threshold._update_value(slider_values["max_stitching_offset_dist"], 5)
+            self.threshold._update_value_dict(slider_values)
             self.logger.info("End image update.")
         else:
             self.logger.error("Failed image update.")
