@@ -26,9 +26,15 @@ class MainManager:
 
         #Saving images
         _, buffer = cv2.imencode(".jpg", frame)
-        img_bytes = buffer.tobytes()
+        img_data = buffer.tobytes()
 
-        cur.execute(post_processor_const.IMAGES_SAVE_SQL, (img_name, img_bytes))
+        cur.execute(post_processor_const.IMAGES_SAVE_SQL, (img_name, img_data))
+        self.conn.commit()
+        
+        #Retrieving id of saved image
+        cur.execute(post_processor_const.IMAGES_LOAD_SQL, (img_name,))
+        row = cur.fetchone()
+        img_id = row[0]
 
         #Saving polygons
         for poly_dict in polygons:
@@ -42,17 +48,17 @@ class MainManager:
             # Convert to JSON string for storage
             vertices_json = json.dumps(vertices_list)
             
-            cur.execute(post_processor_const.POLYGONS_SAVE_SQL, (img_name, polygon_index, label, vertices_json))
+            cur.execute(post_processor_const.POLYGONS_SAVE_SQL, (img_id, polygon_index, label, vertices_json))
 
         # Saving connected_points and connected_inner_points
-        self.save_point_data("connected_points", connected_points, img_name)
-        self.save_point_data("connected_inner_points", connected_inner_points, img_name)
+        self.save_point_data("connected_points", connected_points, img_id)
+        self.save_point_data("connected_inner_points", connected_inner_points, img_id)
 
         # Saving slider_values
         cur.execute(
             post_processor_const.SLIDER_VALUES_SAVE_SQL,
             (
-                img_name,
+                img_id,
                 slider_values.get("neighbour_margin_factor"),
                 slider_values.get("boundary_margin_factor"),
                 slider_values.get("max_connected_line_dist"),
@@ -81,7 +87,7 @@ class MainManager:
             serializable_matches.append(entry)
 
         match_json = None if not serializable_matches else json.dumps(serializable_matches)
-        cur.execute(post_processor_const.MATCHES_SAVE_SQL, (img_name, match_json))
+        cur.execute(post_processor_const.MATCHES_SAVE_SQL, (img_id, match_json))
 
         # Saving stitching_alignment_closest_boundary
         lines = []
@@ -95,17 +101,17 @@ class MainManager:
                 raise TypeError("Invalid line type")
 
         if not lines:
-            cur.execute(post_processor_const.SACB_SAVE_SQL, (img_name, None))
+            cur.execute(post_processor_const.SACB_SAVE_SQL, (img_id, None))
         else:
-            cur.execute(post_processor_const.SACB_SAVE_SQL, (img_name, json.dumps(lines)))
+            cur.execute(post_processor_const.SACB_SAVE_SQL, (img_id, json.dumps(lines)))
 
         self.conn.commit()
 
-    def save_point_data(self, table_name, points, img_name):
+    def save_point_data(self, table_name, points, img_id):
         cur = self.conn.cursor()
         sql = f"""
         INSERT INTO {table_name} (
-            img_name, boundary_linestring, layer,
+            img_id, boundary_linestring, layer,
             point_data
         )
         VALUES (%s, %s, %s, %s)
@@ -142,7 +148,7 @@ class MainManager:
             ])
 
             cur.execute(sql, (
-                img_name,
+                img_id,
                 linestring_json,
                 layer,
                 point_data_json
@@ -158,12 +164,14 @@ class MainManager:
         row = cur.fetchone()
         if row is None:
             raise FileNotFoundError(f"Image '{img_name}' not found in database") 
-        img_bytes = row[1]
+        img_bytes = row[2]
         np_arr = np.frombuffer(img_bytes, dtype=np.uint8)
         img_data = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
+        img_id = row[0]
+
         #Loading polygons
-        cur.execute(post_processor_const.POLYGONS_LOAD_SQL, (img_name,))
+        cur.execute(post_processor_const.POLYGONS_LOAD_SQL, (img_id,))
         rows = cur.fetchall()
         polygons = [
             {"id": r[0], "label": r[1], "polygon": Polygon(json.loads(r[2]))} 
@@ -171,19 +179,19 @@ class MainManager:
         ]
 
         #Loading points
-        connected_points = self.load_point_data(img_name, "connected_points")
-        connected_inner_points = self.load_point_data(img_name, "connected_inner_points")
+        connected_points = self.load_point_data(img_id, "connected_points")
+        connected_inner_points = self.load_point_data(img_id, "connected_inner_points")
 
         #Loading slider values
         cur2 = self.conn.cursor(dictionary = True)
-        cur2.execute(post_processor_const.SLIDER_VALUES_LOAD_SQL, (img_name,))
+        cur2.execute(post_processor_const.SLIDER_VALUES_LOAD_SQL, (img_id,))
 
         row = cur2.fetchone()
 
         slider_values = {key: float(value) if value is not None else None for key, value in row.items()}
 
         #Loading matches
-        cur.execute(post_processor_const.MATCHES_LOAD_SQL, (img_name,))
+        cur.execute(post_processor_const.MATCHES_LOAD_SQL, (img_id,))
         row = cur.fetchone()
 
         if not row or row[0] is None:
@@ -195,7 +203,7 @@ class MainManager:
             else:
                 matches = match_data
 
-        cur.execute(post_processor_const.SACB_LOAD_SQL, (img_name,))
+        cur.execute(post_processor_const.SACB_LOAD_SQL, (img_id,))
 
         row = cur.fetchone()
 
@@ -215,13 +223,13 @@ class MainManager:
             sacb = [loads(wkt) for wkt in wkt_list]
         return img_data, polygons, connected_points, connected_inner_points, slider_values, matches, sacb
     
-    def load_point_data(self, img_name, table_name):
+    def load_point_data(self, img_id, table_name):
         cur = self.conn.cursor()
         cur.execute(f"""
             SELECT boundary_linestring, layer, point_data
             FROM {table_name}
-            WHERE img_name = %s
-        """, (img_name,))
+            WHERE img_id = %s
+        """, (img_id,))
 
         points = {}
         for boundary_json, layer, point_data_json in cur:

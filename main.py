@@ -61,7 +61,7 @@ class MyApp(QMainWindow):
         right_layout = QVBoxLayout(self.right_frame)
 
         # Instantiate right-side modules: Result Display, Threshold Control, and History Table
-        self.image_view = ImageUi(self.logger, self.history, self.manager)
+        self.image_view = ImageUi(self.logger, self.history)
         self.threshold_view = ThresholdUi(self.logger, self.manager, self.history, self.image_view)
         self.history_view = HistoryUi(self.camera, self.history, self.image_view, self.logger, self.manager, self.threshold_view)
 

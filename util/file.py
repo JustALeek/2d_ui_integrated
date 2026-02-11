@@ -1,23 +1,21 @@
 import os
 import cv2
-import json
-import numpy as np
-import picologging as logging
 
-from datetime import datetime
 from config import file_const
 
 class File():
 
     def __init__(self):
-        self.path = file_const.SAVE_DIR
+        self.path = file_const.SAVE_JPG_DIR
+        self.path2 = file_const.SAVE_VIS_DIR
         self.path.mkdir(parents = True, exist_ok = True)
+        self.path2.mkdir(parents = True, exist_ok = True)
 
     # .jpg 파일 저장
-    def save_jpg(self, frame, timestamp):
-        jpg_path = self.path / f"IMG_{timestamp}.{file_const.JPG_EXTENSION}"
+    def save_jpg(self, frame, timestamp, visualization = False):
+        save_path = self.path2 if visualization else self.path
+        jpg_path = save_path / f"IMG_{timestamp}_vis.{file_const.JPG_EXTENSION}" if visualization else save_path / f"IMG_{timestamp}.{file_const.JPG_EXTENSION}"
         cv2.imwrite(str(jpg_path), frame)
-
 
     # .jpg 파일 전체 불러오기 / 시작 화면
     def get_all_jpg(self):
@@ -25,7 +23,7 @@ class File():
 
         jpg_files.sort(reverse=True)
 
-        return jpg_files, file_const.SAVE_DIR
+        return jpg_files, file_const.SAVE_JPG_DIR
 
     # .jpg 파일 열기 / 보기 기능
     def get_jpg(self, filename):
@@ -44,4 +42,4 @@ class File():
 
         last_jpg_file = max(jpg_files, key = os.path.getmtime)
 
-        return last_jpg_file, file_const.SAVE_DIR
+        return last_jpg_file, file_const.SAVE_JPG_DIR

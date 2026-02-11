@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (QHBoxLayout, QVBoxLayout, QLabel, QGroupBox,
                              QSlider, QSizePolicy, QPushButton)
 
 from config import main_const
+from util.file import File
 
 class ThresholdUi(QGroupBox):
 
@@ -121,26 +122,12 @@ class ThresholdUi(QGroupBox):
         # Persist changes and notify other modules
         self.threshold_changed_signal.emit()
 
-    def _load_config(self, img_name = None):
-        """Loads threshold configuration from a local JSON file or initializes defaults."""
+    def _load_config(self):
+        """initializes default slider values."""
 
-        # Default fallback values
         self.n_margin, self.b_margin = 330, 330
         self.conn_dist, self.comp_dist, self.stitch_dist = 40, 210, 630
         
-        try:
-            if not img_name:
-                img_name, _, _= self.history.get_last_img()
-            _, slider_values, _ = self.manager.run_load_pipeline(img_name)
-    
-            # Mapping loaded values to internal variables
-            self.n_margin = int(list(slider_values.values())[0])
-            self.b_margin = int(list(slider_values.values())[1])
-            self.conn_dist = int(list(slider_values.values())[2])
-            self.comp_dist = int(list(slider_values.values())[3])
-            self.stitch_dist = int(list(slider_values.values())[4])
-        except Exception as e:
-            self.logger.error(f"Failed read threshold data: {e}")
 
     def _save_config(self):
         """Persists the current threshold configuration to the database."""
@@ -163,6 +150,9 @@ class ThresholdUi(QGroupBox):
                                            slider_values = slider_values,
                                            matches = data["matches"],
                                            sacb = data["sacb"])
-            self.image.update_view()
+            frame, _, _ = self.manager.run_load_pipeline(data["img_name"])
+            self.image.update_view(frame)
+            file = File()
+            file.save_jpg(frame, data["img_name"][4:-4], True)
         except Exception as e:
             self.logger.error(f"Failed save threshold data: {e}")

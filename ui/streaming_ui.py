@@ -3,12 +3,14 @@ Class for real-time video streaming display and camera control interface.
 Handles video frames, resolution settings, and manual capture triggers.
 """
 
+from datetime import datetime
 from PyQt6.QtCore import pyqtSlot, Qt
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGroupBox, QComboBox, QPushButton
 from PyQt6.QtGui import QImage, QPixmap, QShortcut, QKeySequence
 
-from config import main_const
+from config import file_const, main_const
 from realtime.inspection import Inspection
+from util.file import File
 
 class StreamingUi(QGroupBox):
     def __init__(self, camera, history, image, logger, res_idx, manager, threshold, parent=None):
@@ -145,11 +147,18 @@ class StreamingUi(QGroupBox):
         # get raw ai-predicted point/polygon data
         d = Inspection().temporary(self.camera.img_frame)
         
-        # unpack and save to database
-        self.manager.run_save_pipeline(d["img_name"], d["frame"], d["points"], d["inner_points"], d["overlap_points"], d["polygons"])
+        # calculate timestamp and save raw image locally
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        img_name = f"IMG_{timestamp}.{file_const.JPG_EXTENSION}"
+        file = File()
+        file.save_jpg(self.camera.img_frame, timestamp)
 
-        # load back processed data from database
-        frame, slider_values, data_dict = self.manager.run_load_pipeline(d["img_name"])
+        # unpack and save to database
+        self.manager.run_save_pipeline(img_name, d["frame"], d["points"], d["inner_points"], d["overlap_points"], d["polygons"])
+
+        # load back processed data from database and save locally
+        frame, slider_values, data_dict = self.manager.run_load_pipeline(img_name)
+        file.save_jpg(frame, timestamp, True)
 
         # update image view and store currently loaded data
         self.image.update_view(frame)

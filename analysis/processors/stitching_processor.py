@@ -25,10 +25,7 @@ class StitchingProcessor:
         debug_geometries = []
 
         for p in overlap_sorted:
-            # No information to classify this point - default to "point"
-            if not points or not inner_points:
-                points.append(p)
-                debug_geometries.append(geom_p)
+            
 
             # Recollect knn each time an overlay point is processed
             pn = StitchingProcessor.k_nearest_neighbors(p, points, k, polygons)
@@ -37,6 +34,11 @@ class StitchingProcessor:
             d_p, geom_p = GeometryProcessor.best_model_with_geometry(p, pn)
             d_i, geom_i = GeometryProcessor.best_model_with_geometry(p, inn)
 
+            # No information to classify this point - default to "point"
+            if not points or not inner_points:
+                points.append(p)
+                debug_geometries.append(geom_p)
+                
             if d_p < confidence_ratio * d_i :
                 points.append(p)
                 debug_geometries.append(geom_p)

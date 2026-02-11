@@ -1,6 +1,8 @@
 from pathlib import Path
 
-SAVE_DIR = Path(__file__).resolve().parent.parent / "data_source"
+SAVE_JPG_DIR = Path(__file__).resolve().parent.parent / "data_source"
+SAVE_VIS_DIR = Path(__file__).resolve().parent.parent / "visualizations"
+
 
 JPG_EXTENSION = "jpg"
 JSON_EXTENSION = "json"
