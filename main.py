@@ -96,7 +96,6 @@ class MyApp(QMainWindow):
                 # Sync data to camera buffer
                 frame, slider_values, data_dict = self.manager.run_load_pipeline(jpg_file)
                 self.image_view.current_image_data = data_dict
-                self.threshold_view
                 self.image_view.update_view(frame)
                 self.threshold_view._update_value_dict(slider_values)
                 self.logger.info("Successfully synchronized view with the latest inspection record.")

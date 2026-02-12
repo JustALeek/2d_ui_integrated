@@ -32,7 +32,7 @@ CREATE TABLE connected_points (
 );
 
 CREATE TABLE connected_inner_points (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    point_id INT AUTO_INCREMENT PRIMARY KEY,
     img_id INT NOT NULL,
     boundary_linestring JSON NULL,
     layer VARCHAR(255) NULL,

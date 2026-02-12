@@ -12,10 +12,9 @@ from PyQt6.QtGui import QImage, QPixmap
 from config import main_const
 
 class ImageUi(QGroupBox):
-    def __init__(self, logger, history, parent=None):
+    def __init__(self, logger, parent=None):
         super().__init__(main_const.ANALYSIS_RESULT_TITLE_TEXT, parent)
         self.logger = logger
-        self.history = history
         self.current_image_data = None
         
         self._init_styling()
@@ -86,4 +85,3 @@ class ImageUi(QGroupBox):
         self.result_image.setScaledContents(False) 
         self.result_image.setPixmap(scaled_pixmap)
         self.logger.info("Result view updated successfully.")
-

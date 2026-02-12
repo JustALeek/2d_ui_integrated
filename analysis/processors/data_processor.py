@@ -37,3 +37,39 @@ class DataProcessor:
             shapely_points.append(Point(p[0], p[1]))
         return shapely_points
     
+    @staticmethod
+    def reformat_to_polygon_objects(raw_polygons):
+        label_mapping={
+            0: 'background',
+            1: 'layer0',
+            2: 'layer1',
+            3: 'layer2',
+            4: 'layer3',
+            5: 'swoosh'
+            }
+        contours = raw_polygons.get("contours", [])
+        labels = raw_polygons.get("labels", [])
+
+        if len(contours) != len(labels):
+            raise ValueError("Contours and labels length mismatch")
+
+        objects = []
+
+        for idx, (contour, label) in enumerate(zip(contours, labels)):
+            # Shapely requires at least 3 unique points
+            if contour is None or len(contour) < 3:
+                continue
+
+            poly = Polygon(contour)
+
+            # Skip empty or invalid results
+            if poly.is_empty:
+                continue
+
+            objects.append({
+                "id": idx,
+                "polygon": poly,
+                "label": label_mapping[label]
+            })
+
+        return objects

@@ -6,7 +6,6 @@ from shapely.wkt import loads
 import mariadb
 
 from .processors.data_processor import DataProcessor
-from .processors.geometry_processor import GeometryProcessor
 from .processors.stitching_processor import StitchingProcessor
 from .processors.data_processor import DataProcessor
 from .processors.visualization_processor import VisualizationProcessor
@@ -275,7 +274,7 @@ class MainManager:
             points = DataProcessor.to_shapely_points(points)
             inner_points = DataProcessor.to_shapely_points(inner_points)
             overlap_points = DataProcessor.to_shapely_points(overlap_points)
-            polygons = GeometryProcessor.reformat_to_polygon_objects(polygons)
+            polygons = DataProcessor.reformat_to_polygon_objects(polygons)
             polygons, points, inner_points, slider_values, matches, sacb = DataProcessor.process_raw_points(points, inner_points, overlap_points, polygons)
         self.save_dbdata(img_name, img_data, polygons, points, inner_points, slider_values, matches, sacb)
 

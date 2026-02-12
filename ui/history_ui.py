@@ -24,7 +24,6 @@ class HistoryUi(QGroupBox):
         self.history = history
         self.result_image = image.result_image
         self.logger = logger
-        self.current_val = 10
         self.manager = manager
         self.threshold = threshold
         self.image = image

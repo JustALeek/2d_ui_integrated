@@ -19,7 +19,6 @@ class ThresholdUi(QGroupBox):
     def __init__(self, logger, manager, history, image, parent=None):
         super().__init__(main_const.THRESHOLD_TITLE_TEXT, parent)
         self.logger = logger
-        self.history = history
         self.config_path = os.path.join("config", "main_config.json")
         self.manager = manager
         self.image = image

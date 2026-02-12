@@ -56,43 +56,6 @@ class StitchingProcessor:
         candidates = [p for p in candidates if p.distance(center_pt) <= max_radius]
         candidates = sorted(candidates, key=lambda p: p.distance(center_pt))
         return candidates[:k]
-    
-    @staticmethod
-    def fit_local_quadratic(points):
-        """
-        Fit a local quadratic curve.
-        Returns a callable distance function.
-        """
-        if len(points) < 3:
-            return None
-
-        coords = np.array([[p.x, p.y] for p in points])
-        min_v, max_v = coords.min(axis=0), coords.max(axis=0)
-
-        # Decide dominant axis
-        horizontal = (max_v[0] - min_v[0]) > (max_v[1] - min_v[1])
-
-        try:
-            if horizontal:
-                coeffs = np.polyfit(coords[:, 0], coords[:, 1], 2)
-                poly = np.poly1d(coeffs)
-
-                def distance_fn(pt):
-                    x, y = pt.x, pt.y
-                    return abs(y - poly(x))
-
-            else:
-                coeffs = np.polyfit(coords[:, 1], coords[:, 0], 2)
-                poly = np.poly1d(coeffs)
-
-                def distance_fn(pt):
-                    x, y = pt.x, pt.y
-                    return abs(x - poly(y))
-
-            return distance_fn
-
-        except np.linalg.LinAlgError:
-            return None
 
     def process_points_by_outline(points_xy, ring):
         """

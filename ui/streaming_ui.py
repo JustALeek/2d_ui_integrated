@@ -13,12 +13,12 @@ from realtime.inspection import Inspection
 from util.file import File
 
 class StreamingUi(QGroupBox):
-    def __init__(self, camera, history, image, logger, res_idx, manager, threshold, parent=None):
+    def __init__(self, camera, history_view, image, logger, res_idx, manager, threshold, parent=None):
         super().__init__(main_const.REALTIME_STREAMING_TITLE_TEXT, parent)
         
         # Initialize core components and dependencies
         self.camera = camera
-        self.history = history
+        self.history_view = history_view
         self.image = image
         self.logger = logger
         self.res_idx = res_idx
@@ -166,7 +166,7 @@ class StreamingUi(QGroupBox):
 
         # update threshold sliders 
         self.threshold._update_value_dict(slider_values)
-        self.history.history_update()
+        self.history_view.history_update()
 
     def keyPressEvent(self, event):
         """Handles legacy keyboard events for editor modes and configuration management."""
